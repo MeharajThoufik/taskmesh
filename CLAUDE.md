@@ -662,9 +662,9 @@ At the start of every Claude Code session:
 
 ---
 
-*Last updated: 2026-06-17 — Phases 1–5 complete and verified*
-*Current phase: Phase 5 (Heartbeat Monitor) DONE*
-*Next action: Phase 6 — Retry + Dead Letter Queue*
+*Last updated: 2026-06-18 — Phases 1–6 complete and verified*
+*Current phase: Phase 6 (Retry + Dead Letter Queue) DONE*
+*Next action: Phase 7 — Integration Testing + Load Testing*
 
 ---
 
@@ -676,6 +676,7 @@ At the start of every Claude Code session:
 - ✅ **Phase 4 — Worker Service Core:** consumer → persist PENDING → coordinator claim (`FOR UPDATE SKIP LOCKED`, batch 10) → executor (Redis-NX idempotency + simulated §11 work) → DONE. Idempotency proven.
 - ✅ **Phase 5 — Heartbeat Monitor:** `WorkerHealth` entity + repo, `HeartbeatService` (publish every 10s, detect dead >60s every 30s). Dead worker → INACTIVE; its RUNNING tasks reset to PENDING **and their Redis idempotency locks released** (else reclaimed tasks would be skipped by the guard). Verified via injected zombie worker: detected → reclaimed → re-executed to DONE by the live worker. `tasks_processed` maintained via a DONE-count query; `current_task_id` left null (model runs a concurrent batch, not one task). Full 3-replica process-kill is exercised in Phase 7. TaskAuditLog + Resilience4j retry/DLQ still to come (Phase 6).
   - 🐞 **Fix (crash-restart orphan bug):** dead-detection alone misses a worker that crashes and restarts within the 60s window — it keeps its heartbeat fresh, is never declared dead, and its abandoned RUNNING tasks would stay stuck forever. Added `HeartbeatService.recoverOwnOrphanedTasks()` (`@EventListener(ApplicationReadyEvent)`): on startup a worker resets its own RUNNING rows → PENDING and releases their locks (a just-started worker can't legitimately own RUNNING work). Verified: orphans with a fresh heartbeat were recovered to DONE within ~2s of restart. Assumes one live instance per `worker_id`.
+- ✅ **Phase 6 — Retry + Dead Letter Queue:** `Resilience4jConfig` (Retry bean: 3 attempts, exponential backoff 1s→2s, retry on `TaskExecutionException`), `RetryHandler` (runs work under retry + routes exhausted tasks to `dead-letter-queue`), worker `KafkaProducerConfig` (TaskResultEvent producer; declares `dead-letter-queue` 2/1 + `task-results` 4/1 — minor extension to §4 since the worker must produce to the DLQ), `TaskAuditLog` entity + repo. `TaskExecutor` rewritten: idempotency lock → retry-wrapped simulate → DONE, or on exhaustion → DEAD + DLQ; writes audit rows (CLAIMED/RETRY/DONE/DEAD/DLQ_ROUTED). Retries are **in-process** (schema has no next-retry-at column, so no DB-driven delayed re-claim) — task stays RUNNING during backoff. Test hook: `"forceFail": true` in payload fails deterministically. Verified: forceFail task → 3 attempts (backoff 1s, 2s confirmed in logs) → DEAD (retry_count=3) → TaskResultEvent(DEAD) on `dead-letter-queue` + full audit trail; normal task → DONE (1 attempt). Note: `FAILED` status now unused in Part 1 (outcomes are DONE or DEAD).
 
 ## Resume Notes (local dev environment — non-obvious)
 

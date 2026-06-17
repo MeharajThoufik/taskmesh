@@ -37,6 +37,11 @@ worker:
   heartbeat-interval-ms: 10000
   detect-interval-ms: 30000
   dead-threshold-seconds: 60
+  # Exponential-backoff retry: 3 attempts, waiting 1s then 2s; then dead-letter.
+  retry:
+    max-attempts: 3
+    initial-backoff-ms: 1000
+    backoff-multiplier: 2.0
 
 logging:
   level:
