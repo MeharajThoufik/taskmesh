@@ -21,13 +21,22 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  # Multiple @Scheduled loops (claim 1s, heartbeat 10s, dead-detect 30s) — give them their
+  # own threads so a slow detection sweep can't stall the claim loop.
+  task:
+    scheduling:
+      pool:
+        size: 3
 
-# Worker identity and claim-loop tuning.
+# Worker identity, claim-loop, and heartbeat tuning.
 worker:
   id: ${WORKER_ID:worker-local}
   batch-size: 10
   poll-interval-ms: 1000
   kafka-group-id: taskmesh-workers
+  heartbeat-interval-ms: 10000
+  detect-interval-ms: 30000
+  dead-threshold-seconds: 60
 
 logging:
   level:

@@ -662,9 +662,9 @@ At the start of every Claude Code session:
 
 ---
 
-*Last updated: 2026-06-16 — Phases 1–4 complete and verified*
-*Current phase: Phase 4 (Worker Service Core) DONE*
-*Next action: Phase 5 — Heartbeat Monitor*
+*Last updated: 2026-06-17 — Phases 1–5 complete and verified*
+*Current phase: Phase 5 (Heartbeat Monitor) DONE*
+*Next action: Phase 6 — Retry + Dead Letter Queue*
 
 ---
 
@@ -673,7 +673,8 @@ At the start of every Claude Code session:
 - ✅ **Phase 1 — Infrastructure:** `docker-compose.yml` + `init.sql`. All 4 services healthy; schema loaded.
 - ✅ **Phase 2 — Common Module:** parent `pom.xml`, `common` module (events, enums, `KafkaTopics`). Maven wrapper generated. Builds to Java 17 bytecode.
 - ✅ **Phase 3 — Producer Service:** `POST /api/tasks` + `/batch` + `/api/health`, publishes `TaskEvent` to `task-events` (acks=all, idempotent). Verified messages land in Kafka. Read-status endpoints (`GET /api/tasks/{id}`, `?status=`) deferred — need persistence layer; decide owner (producer read-repo vs Part 2 dashboard) later.
-- ✅ **Phase 4 — Worker Service Core:** consumer → persist PENDING → coordinator claim (`FOR UPDATE SKIP LOCKED`, batch 10) → executor (Redis-NX idempotency + simulated §11 work) → DONE. Idempotency proven. Retry/DLQ/audit + WorkerHealth/TaskAuditLog entities still to come (Phases 5–6).
+- ✅ **Phase 4 — Worker Service Core:** consumer → persist PENDING → coordinator claim (`FOR UPDATE SKIP LOCKED`, batch 10) → executor (Redis-NX idempotency + simulated §11 work) → DONE. Idempotency proven.
+- ✅ **Phase 5 — Heartbeat Monitor:** `WorkerHealth` entity + repo, `HeartbeatService` (publish every 10s, detect dead >60s every 30s). Dead worker → INACTIVE; its RUNNING tasks reset to PENDING **and their Redis idempotency locks released** (else reclaimed tasks would be skipped by the guard). Verified via injected zombie worker: detected → reclaimed → re-executed to DONE by the live worker. `tasks_processed` maintained via a DONE-count query; `current_task_id` left null (model runs a concurrent batch, not one task). Full 3-replica process-kill is exercised in Phase 7. TaskAuditLog + Resilience4j retry/DLQ still to come (Phase 6).
 
 ## Resume Notes (local dev environment — non-obvious)
 
