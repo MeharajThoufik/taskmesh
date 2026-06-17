@@ -1,0 +1,37 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: producer-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+
+# Topic definitions. Names are mirrored from KafkaTopics.java constants and must stay in
+# sync; partitions/replication are read by KafkaProducerConfig. Part 2 topics are NOT
+# declared here — they are created by Part 2 services.
+kafka:
+  topics:
+    task-events:
+      name: task-events
+      partitions: 4
+      replication-factor: 1
+    task-results:
+      name: task-results
+      partitions: 4
+      replication-factor: 1
+    dead-letter-queue:
+      name: dead-letter-queue
+      partitions: 2
+      replication-factor: 1
+
+logging:
+  level:
+    com.taskmesh: INFO

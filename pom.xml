@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- TaskMesh multi-module parent. -->
+    <!-- Inherits Spring Boot's dependency management (versions for Spring, Kafka, -->
+    <!-- Jackson, Lombok, Testcontainers, etc.) so child modules omit versions. -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.taskmesh</groupId>
+    <artifactId>taskmesh-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>taskmesh-parent</name>
+    <description>Fault-tolerant distributed task execution engine (Part 1)</description>
+
+    <modules>
+        <module>common</module>
+        <module>producer-service</module>
+        <module>worker-service</module>
+    </modules>
+
+    <properties>
+        <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <resilience4j.version>2.2.0</resilience4j.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Resilience4j is not managed by spring-boot-starter-parent; pin it here -->
+            <!-- so the worker-service (Phase 6) gets consistent 2.x versions. -->
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-bom</artifactId>
+                <version>${resilience4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- The shared module, referenced by both services. -->
+            <dependency>
+                <groupId>com.taskmesh</groupId>
+                <artifactId>common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

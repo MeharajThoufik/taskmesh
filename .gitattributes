@@ -1,0 +1,16 @@
+# Normalize line endings in the repo to LF; let Git handle working-copy conversion.
+* text=auto eol=lf
+
+# Windows scripts must keep CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Shell scripts and the Maven wrapper must keep LF (they break with CRLF).
+*.sh  text eol=lf
+mvnw  text eol=lf
+
+# Binary files — never normalize.
+*.jar binary
+*.png binary
+*.jpg binary
+*.gif binary

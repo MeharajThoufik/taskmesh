@@ -1,0 +1,37 @@
+# Maven build output
+target/
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# Maven wrapper: keep mvnw / mvnw.cmd / .mvn/wrapper/maven-wrapper.properties,
+# but never commit a downloaded local Maven distribution.
+.mvn/wrapper/dists/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+nbproject/
+nbactions.xml
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env overrides
+*.env
+.env
+application-local.yml
+
+# Docker volumes (named volumes live in Docker, not here; this is just defensive)
+postgres-data/
