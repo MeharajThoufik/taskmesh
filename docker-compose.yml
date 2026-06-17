@@ -1,13 +1,12 @@
-# TaskMesh — Phase 1 infrastructure
+# TaskMesh — full stack (Part 1)
 #
-# Brings up the backing services: PostgreSQL, Redis, Kafka, Zookeeper.
-# The producer-service and worker-service entries (Section 8 of CLAUDE.md) are added
-# in their own phases once those modules and Dockerfiles exist — including them now
-# would make `docker-compose up` fail on the missing build contexts.
+# Infra (PostgreSQL, Redis, Kafka, Zookeeper) + the application services:
+# producer-service and 3 worker replicas. One command brings everything up.
 #
 # Usage:
-#   docker-compose up -d
-#   docker-compose ps        # all services should report healthy
+#   ./mvnw clean package          # build the service jars first (Dockerfiles copy them in)
+#   docker compose up -d --build  # build images + start the whole stack
+#   docker compose ps             # all services should report healthy/running
 
 services:
   postgres:
@@ -66,7 +65,13 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # Two listeners: INTERNAL for in-Docker clients (advertised as kafka:29092) and
+      # EXTERNAL for host clients (advertised as localhost:9092). Containerized services
+      # use kafka:29092; tooling on the host uses localhost:9092.
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     healthcheck:
@@ -74,6 +79,77 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+
+  # Task intake REST API (port 8081 on host).
+  producer-service:
+    build:
+      context: ./producer-service
+    image: taskmesh/producer-service:1.0.0
+    container_name: taskmesh-producer
+    ports:
+      - "8081:8081"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # 3 worker replicas to simulate a distributed pool. No restart policy: a killed worker
+  # stays down so dead-detection on the survivors can reclaim its tasks (Phase 7 test).
+  worker-service-1:
+    build:
+      context: ./worker-service
+    image: taskmesh/worker-service:1.0.0
+    container_name: taskmesh-worker-1
+    environment:
+      WORKER_ID: worker-1
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/taskmesh
+      REDIS_HOST: redis
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # -2 and -3 reuse the image built by worker-service-1 (same Dockerfile) — no rebuild.
+  worker-service-2:
+    image: taskmesh/worker-service:1.0.0
+    container_name: taskmesh-worker-2
+    environment:
+      WORKER_ID: worker-2
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/taskmesh
+      REDIS_HOST: redis
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-service-3:
+    image: taskmesh/worker-service:1.0.0
+    container_name: taskmesh-worker-3
+    environment:
+      WORKER_ID: worker-3
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/taskmesh
+      REDIS_HOST: redis
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres-data:

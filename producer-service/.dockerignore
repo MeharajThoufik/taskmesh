@@ -1,0 +1,8 @@
+# Keep the build context small — only the fat jar is needed by the Dockerfile.
+src
+target/classes
+target/generated-sources
+target/maven-status
+target/maven-archiver
+target/test-classes
+*.iml
