@@ -8,6 +8,8 @@ import com.taskmesh.worker.repository.TaskRepository;
 import com.taskmesh.worker.repository.WorkerHealthRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,10 @@ import java.util.List;
  *   <li>{@link #detectDeadWorkers()} — every 30s, finds workers whose last heartbeat is older than
  *       the staleness threshold (60s), marks them INACTIVE, resets their RUNNING tasks to PENDING,
  *       and releases the tasks' Redis idempotency locks so a healthy worker can re-execute them.</li>
+ *   <li>{@link #recoverOwnOrphanedTasks()} — once on startup, reclaims this worker's own tasks left
+ *       RUNNING by a previous crashed incarnation. Dead-detection alone misses this: a worker that
+ *       crashes and restarts within the 60s window keeps its heartbeat fresh, so it is never
+ *       declared dead — yet the work it abandoned would otherwise stay stuck in RUNNING forever.</li>
  * </ul>
  *
  * <p>Releasing the lock on reclaim is essential: a worker that died mid-execution may still hold
@@ -51,6 +57,34 @@ public class HeartbeatService {
         this.idempotencyService = idempotencyService;
         this.workerId = workerId;
         this.deadThresholdSeconds = deadThresholdSeconds;
+    }
+
+    /**
+     * Reclaim tasks this worker left RUNNING before a crash/restart.
+     *
+     * <p>A just-started worker has no in-flight executions, so any RUNNING row still bearing its
+     * (stable) {@code worker_id} must be an orphan from a previous incarnation. Reset those to
+     * PENDING and release their idempotency locks so the claim loop re-executes them. This closes
+     * the gap left by dead-detection when a worker restarts inside the 60s staleness window.
+     *
+     * <p>Assumes one live instance per {@code worker_id} (our deployment model). If two processes
+     * ever shared an id, this could reset the other's in-flight tasks — SKIP LOCKED and the
+     * idempotency guard still bound the impact.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void recoverOwnOrphanedTasks() {
+        List<String> lockedKeys = taskRepository.findIdempotencyKeys(workerId, TaskStatus.RUNNING);
+        int reclaimed = taskRepository.reclaimTasksFromWorker(
+                workerId, TaskStatus.PENDING, TaskStatus.RUNNING, Instant.now());
+        lockedKeys.forEach(idempotencyService::releaseLock);
+        if (reclaimed > 0) {
+            log.warn("Startup recovery: reset {} orphaned RUNNING task(s) from a previous incarnation "
+                            + "of {} back to PENDING and released {} idempotency lock(s).",
+                    reclaimed, workerId, lockedKeys.size());
+        } else {
+            log.info("Startup recovery: no orphaned RUNNING tasks for {}.", workerId);
+        }
     }
 
     @Scheduled(fixedDelayString = "${worker.heartbeat-interval-ms:10000}")
